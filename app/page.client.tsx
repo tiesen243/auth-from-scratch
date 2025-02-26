@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { signIn } from '@/server/auth'
+import { signIn, signOut } from '@/server/auth'
 
 export const SignInForm: React.FC<{
   setTokenAction: (token: string, expires: Date) => Promise<void>
@@ -38,7 +38,7 @@ export const SignInForm: React.FC<{
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto grid max-w-md gap-4">
+    <form onSubmit={handleSubmit} className="mx-auto grid w-svh max-w-md gap-4">
       <fieldset className="grid gap-2">
         <Label htmlFor="email">Email</Label>
         <Input type="email" id="email" name="email" />
@@ -53,5 +53,21 @@ export const SignInForm: React.FC<{
 
       <Button type="submit">Sign In</Button>
     </form>
+  )
+}
+
+export const SignOutButton: React.FC<{ deleteTokenAction: () => Promise<void> }> = ({
+  deleteTokenAction,
+}) => {
+  return (
+    <Button
+      onClick={async () => {
+        await signOut()
+        await deleteTokenAction()
+        toast.success("You're signed out")
+      }}
+    >
+      Sign out
+    </Button>
   )
 }

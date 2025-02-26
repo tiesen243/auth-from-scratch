@@ -81,6 +81,22 @@ class AuthClass {
     }
   }
 
+  public async signOut(req?: Request) {
+    let token: string
+
+    if (req) {
+      const cookies = this.parsedCookies(req.headers)
+      token =
+        cookies[this.TOKEN_KEY] ??
+        req.headers.get('Authorization')?.replace('Bearer ', '') ??
+        ''
+    } else {
+      token = (await cookies()).get(this.TOKEN_KEY)?.value ?? ''
+    }
+
+    await this.session.invalidateSessionToken(token)
+  }
+
   private parsedCookies(headers: Headers): Record<string, string> {
     const cookiesHeader = headers.get('cookie')
     if (!cookiesHeader) return {}
@@ -151,6 +167,7 @@ export const Auth = (args: { providers: Providers; baseUrl: string }) => {
     auth: (req?: Request) => authInstance.auth(req),
     signIn: (args: { provider: string; data?: z.infer<typeof credentialsSchema> }) =>
       authInstance.signIn(args),
+    signOut: (req?: Request) => authInstance.signOut(req),
     handlers: (req: Request) => authInstance.handlers(req),
   }
 }

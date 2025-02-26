@@ -64,7 +64,8 @@ export class Session {
   }
 
   public async invalidateSessionToken(token: string): Promise<void> {
-    await this.db.session.delete({ where: { sessionToken: token } })
+    const sessionToken = encodeHexLowerCase(sha256(new TextEncoder().encode(token)))
+    await this.db.session.delete({ where: { sessionToken } })
   }
 
   public async invalidateAllSessionTokens(userId: User['id']): Promise<void> {

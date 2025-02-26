@@ -8,6 +8,7 @@ import { Auth } from '@/server/auth/auth'
 const {
   auth: uncachedAuth,
   signIn,
+  signOut,
   handlers,
 } = Auth({
   providers: {},
@@ -16,4 +17,4 @@ const {
 
 const auth = cache(uncachedAuth)
 
-export { auth, signIn, handlers }
+export { auth, signIn, signOut, handlers }

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 
 import { env } from '@/env'
 import { auth } from '@/server/auth'
-import { SignInForm } from './page.client'
+import { SignInForm, SignOutButton } from './page.client'
 
 export default async function HomePage() {
   const session = await auth()
@@ -18,11 +18,22 @@ export default async function HomePage() {
     })
   }
 
-  return (
-    <main className="container">
-      <pre>{JSON.stringify(session, null, 2)}</pre>
+  const deleteTokenAction = async () => {
+    'use server'
+    ;(await cookies()).delete('auth_token')
+  }
 
-      {session.user ? <></> : <SignInForm setTokenAction={setTokenAction} />}
+  return (
+    <main className="container flex flex-col items-center gap-4 py-4">
+      <pre className="mx-auto w-svh max-w-md overflow-x-auto">
+        {JSON.stringify(session, null, 2)}
+      </pre>
+
+      {session.user ? (
+        <SignOutButton deleteTokenAction={deleteTokenAction} />
+      ) : (
+        <SignInForm setTokenAction={setTokenAction} />
+      )}
     </main>
   )
 }
