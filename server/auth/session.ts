@@ -1,6 +1,6 @@
 import type { User } from '@prisma/client'
 import { sha256 } from '@oslojs/crypto/sha2'
-import { encodeBase32LowerCase, encodeHexLowerCase } from '@oslojs/encoding'
+import { encodeBase32LowerCaseNoPadding, encodeHexLowerCase } from '@oslojs/encoding'
 
 import { db } from '@/server/db'
 
@@ -15,24 +15,24 @@ export class Session {
   private generateSessionToken(): string {
     const bytes = new Uint8Array(20)
     crypto.getRandomValues(bytes)
-    return encodeBase32LowerCase(bytes)
+    const token = encodeBase32LowerCaseNoPadding(bytes)
+    return token
   }
 
-  public async createCreateSession(
+  public async createSession(
     userId: User['id'],
   ): Promise<{ sessionToken: string; expires: Date }> {
     const token = this.generateSessionToken()
-    const sessionToken = encodeHexLowerCase(sha256(new TextEncoder().encode(token)))
 
     const session = await this.db.session.create({
       data: {
-        sessionToken,
-        userId,
+        sessionToken: encodeHexLowerCase(sha256(new TextEncoder().encode(token))),
         expires: new Date(Date.now() + this.EXPIRATION_TIME),
+        userId,
       },
     })
 
-    return session
+    return { sessionToken: token, expires: session.expires }
   }
 
   public async validateSessionToken(token: string): Promise<SessionResult> {
