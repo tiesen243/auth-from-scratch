@@ -1,10 +1,13 @@
+import type { OAuth2Tokens } from 'arctic'
 import { cookies } from 'next/headers'
+import { generateCodeVerifier, generateState } from 'arctic'
 import { z } from 'zod'
 
 import type { SessionResult } from '@/server/auth/session'
+import { env } from '@/env'
+import { Password } from '@/server/auth/password'
 import { Session } from '@/server/auth/session'
 import { db } from '@/server/db'
-import { Password } from './password'
 
 class AuthClass {
   private readonly db: typeof db = db
@@ -12,11 +15,9 @@ class AuthClass {
   private readonly TOKEN_KEY: string = 'auth_token'
 
   private readonly providers: Providers
-  private readonly baseUrl: string
 
-  constructor(args: { providers: Providers; baseUrl: string }) {
+  constructor(args: { providers: Providers }) {
     this.providers = args.providers
-    this.baseUrl = args.baseUrl
   }
 
   public async auth(req?: Request): Promise<SessionResult> {
@@ -49,6 +50,90 @@ class AuthClass {
         if (url.pathname === '/api/auth') {
           const session = await this.auth(req)
           response = new Response(JSON.stringify(session))
+        } else if (url.pathname.startsWith('/api/auth/oauth')) {
+          const isCallback = url.pathname.endsWith('/callback')
+
+          if (!isCallback) {
+            const provider = String(url.pathname.split('/').pop())
+            const state = generateState()
+            const codeVerifier = generateCodeVerifier()
+            const authorizationUrl = this.providers[provider]?.createAuthorizationURL(
+              state,
+              codeVerifier,
+            )
+
+            if (!authorizationUrl) {
+              response = new Response('Provider not found', { status: 404 })
+            } else {
+              response = new Response('', { status: 302 })
+              response.headers.set('Location', authorizationUrl.toString())
+              response.headers.set('Set-Cookie', `oauth_state=${state}; Path=/`)
+
+              response.headers.set(
+                'Set-Cookie',
+                `oauth_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax}`,
+              )
+              response.headers.append(
+                'Set-Cookie',
+                `code_verifier=${codeVerifier}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax}`,
+              )
+            }
+          } else {
+            const cookies = this.parsedCookies(req.headers)
+
+            const provider = String(url.pathname.split('/').slice(-2)[0])
+            const code = url.searchParams.get('code')
+            const state = url.searchParams.get('state')
+            const storedState = cookies.oauth_state
+            const codeVerifier = cookies.code_verifier ?? ''
+
+            try {
+              if (!code || !state || state !== storedState)
+                throw new Error('Invalid state')
+
+              const { validateAuthorizationCode, fetchUserUrl, mapUser } =
+                this.providers[provider] ?? {}
+              if (!validateAuthorizationCode || !fetchUserUrl || !mapUser)
+                throw new Error('Provider not found')
+
+              const verifiedCode = await validateAuthorizationCode(code, codeVerifier)
+
+              const token = verifiedCode.accessToken()
+
+              const res = await fetch(fetchUserUrl, {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              if (!res.ok) throw new Error(`Failed to fetch user data from ${provider}`)
+
+              const user = await this.createUser(mapUser((await res.json()) as never))
+              const session = await this.session.createSession(user.id)
+
+              response = new Response('', { status: 302 })
+
+              response.headers.set('Location', '/')
+              response.headers.set(
+                'Set-Cookie',
+                `auth_token=${session.sessionToken}; HttpOnly; Path=/; SameSite=Lax; Expires=${session.expires.toUTCString()}${env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+              )
+              response.headers.append(
+                'Set-Cookie',
+                `oauth_state=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT${env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+              )
+              response.headers.append(
+                'Set-Cookie',
+                `code_verifier=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT${env.NODE_ENV === 'production' ? '; Secure' : ''}`,
+              )
+            } catch (error) {
+              if (error instanceof Error)
+                response = new Response(JSON.stringify({ error: error.message }), {
+                  status: 400,
+                })
+              else
+                response = new Response(JSON.stringify({ error: 'An error occurred' }), {
+                  status: 500,
+                })
+            }
+          }
         }
         break
       case 'POST':
@@ -66,19 +151,6 @@ class AuthClass {
 
     this.setCorsHeaders(response)
     return response
-  }
-
-  public async signIn(args: {
-    provider: string
-    data?: z.infer<typeof credentialsSchema>
-  }) {
-    switch (args.provider) {
-      case 'credentials':
-        if (!args.data) throw new Error('No data provided')
-        return await this.signInWithCredentials(args.data)
-      default:
-        throw new Error('Invalid provider')
-    }
   }
 
   public async signOut(req?: Request) {
@@ -107,7 +179,7 @@ class AuthClass {
     }, {})
   }
 
-  private async signInWithCredentials(
+  public async signInWithCredentials(
     data: z.infer<typeof credentialsSchema>,
   ): Promise<
     | { success: false; fieldErrors: Record<string, string[]> }
@@ -129,6 +201,45 @@ class AuthClass {
     return { success: true, session: await this.session.createSession(user.id) }
   }
 
+  private async createUser(data: {
+    provider: string
+    providerAccountId: string
+    providerAccountName: string
+    email: string
+    image: string
+  }) {
+    const { provider, providerAccountId, providerAccountName, email, image } = data
+
+    const existingAccount = await db.account.findUnique({
+      where: { provider_providerAccountId: { provider, providerAccountId } },
+    })
+
+    if (existingAccount) {
+      const user = await db.user.findUnique({
+        where: { id: existingAccount.userId },
+      })
+      if (!user) throw new Error(`Failed to sign in with ${provider}`)
+      return user
+    }
+
+    const accountData = {
+      provider,
+      providerAccountId,
+      providerAccountName,
+    }
+
+    return await db.user.upsert({
+      where: { email },
+      update: { accounts: { create: accountData } },
+      create: {
+        email,
+        name: providerAccountName,
+        image,
+        accounts: { create: accountData },
+      },
+    })
+  }
+
   private setCorsHeaders(res: Response) {
     res.headers.set('Content-Type', 'application/json')
     res.headers.set('Access-Control-Allow-Origin', '*')
@@ -141,10 +252,18 @@ class AuthClass {
 type Providers = Record<
   string,
   {
-    scopes: string[]
+    createAuthorizationURL: (state: string, codeVerifier: string) => URL
+    validateAuthorizationCode: (
+      code: string,
+      codeVerifier: string,
+    ) => Promise<OAuth2Tokens>
     fetchUserUrl: string
-    mapUser: (user: unknown) => {
+    mapUser: (user: never) => {
+      provider: string
       providerAccountId: string
+      providerAccountName: string
+      email: string
+      image: string
     }
   }
 >
@@ -160,13 +279,13 @@ const credentialsSchema = z.object({
     ),
 })
 
-export const Auth = (args: { providers: Providers; baseUrl: string }) => {
+export const Auth = (args: { providers: Providers }) => {
   const authInstance = new AuthClass(args)
 
   return {
     auth: (req?: Request) => authInstance.auth(req),
-    signIn: (args: { provider: string; data?: z.infer<typeof credentialsSchema> }) =>
-      authInstance.signIn(args),
+    signInWithCredentials: (data: z.infer<typeof credentialsSchema>) =>
+      authInstance.signInWithCredentials(data),
     signOut: (req?: Request) => authInstance.signOut(req),
     handlers: (req: Request) => authInstance.handlers(req),
   }
