@@ -1,3 +1,4 @@
+import type { User } from '@prisma/client'
 import type { OAuth2Tokens } from 'arctic'
 import { cookies } from 'next/headers'
 import { generateCodeVerifier, generateState } from 'arctic'
@@ -69,14 +70,8 @@ class AuthClass {
               response.headers.set('Location', authorizationUrl.toString())
               response.headers.set('Set-Cookie', `oauth_state=${state}; Path=/`)
 
-              response.headers.set(
-                'Set-Cookie',
-                `oauth_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax}`,
-              )
-              response.headers.append(
-                'Set-Cookie',
-                `code_verifier=${codeVerifier}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax}`,
-              )
+              this.setCookie(response, 'oauth_state', state, { maxAge: 600 })
+              this.setCookie(response, 'code_verifier', codeVerifier, { maxAge: 600 })
             }
           } else {
             const cookies = this.parsedCookies(req.headers)
@@ -111,18 +106,14 @@ class AuthClass {
               response = new Response('', { status: 302 })
 
               response.headers.set('Location', '/')
-              response.headers.set(
-                'Set-Cookie',
-                `auth_token=${session.sessionToken}; HttpOnly; Path=/; SameSite=Lax; Expires=${session.expires.toUTCString()}${env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-              )
-              response.headers.append(
-                'Set-Cookie',
-                `oauth_state=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT${env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-              )
-              response.headers.append(
-                'Set-Cookie',
-                `code_verifier=; HttpOnly; Path=/; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT${env.NODE_ENV === 'production' ? '; Secure' : ''}`,
-              )
+              this.setCookie(response, 'auth_token', session.sessionToken, {
+                expires: session.expires,
+                replace: true,
+              })
+
+              const pastDate = new Date(0)
+              this.setCookie(response, 'oauth_state', '', { expires: pastDate })
+              this.setCookie(response, 'code_verifier', '', { expires: pastDate })
             } catch (error) {
               if (error instanceof Error)
                 response = new Response(JSON.stringify({ error: error.message }), {
@@ -145,6 +136,7 @@ class AuthClass {
             ''
           await this.session.invalidateSessionToken(token)
           response = new Response('', { status: 204 })
+          this.setCookie(response, this.TOKEN_KEY, '', { expires: new Date(0) })
         }
         break
     }
@@ -153,7 +145,29 @@ class AuthClass {
     return response
   }
 
-  public async signOut(req?: Request) {
+  public async signInWithCredentials(
+    data: z.infer<typeof credentialsSchema>,
+  ): Promise<
+    | { success: false; fieldErrors: Record<string, string[]> }
+    | { success: true; session: { sessionToken: string; expires: Date } }
+  > {
+    const parsedData = credentialsSchema.safeParse(data)
+    if (!parsedData.success)
+      return { success: false, fieldErrors: parsedData.error.flatten().fieldErrors }
+
+    const { email, password } = parsedData.data
+
+    const user = await this.db.user.findUnique({ where: { email } })
+    if (!user) throw new Error('User not found')
+    if (!user.password) throw new Error('User has no password')
+
+    const passwordMatch = await new Password().verifyPassword(password, user.password)
+    if (!passwordMatch) throw new Error('Invalid password')
+
+    return { success: true, session: await this.session.createSession(user.id) }
+  }
+
+  public async signOut(req?: Request): Promise<void> {
     let token: string
 
     if (req) {
@@ -179,26 +193,35 @@ class AuthClass {
     }, {})
   }
 
-  public async signInWithCredentials(
-    data: z.infer<typeof credentialsSchema>,
-  ): Promise<
-    | { success: false; fieldErrors: Record<string, string[]> }
-    | { success: true; session: { sessionToken: string; expires: Date } }
-  > {
-    const parsedData = credentialsSchema.safeParse(data)
-    if (!parsedData.success)
-      return { success: false, fieldErrors: parsedData.error.flatten().fieldErrors }
+  private setCookie(
+    response: Response,
+    name: string,
+    value: string,
+    options: {
+      expires?: Date
+      maxAge?: number
+      replace?: boolean
+    } = {},
+  ): void {
+    const { expires, maxAge, replace = false } = options
 
-    const { email, password } = parsedData.data
+    let cookieValue = `${name}=${value}; HttpOnly; Path=/; SameSite=Lax`
 
-    const user = await this.db.user.findUnique({ where: { email } })
-    if (!user) throw new Error('User not found')
-    if (!user.password) throw new Error('User has no password')
+    if (expires) {
+      cookieValue += `; Expires=${expires.toUTCString()}`
+    } else if (maxAge !== undefined) {
+      cookieValue += `; Max-Age=${maxAge}`
+    }
 
-    const passwordMatch = await new Password().verifyPassword(password, user.password)
-    if (!passwordMatch) throw new Error('Invalid password')
+    if (env.NODE_ENV === 'production') {
+      cookieValue += '; Secure'
+    }
 
-    return { success: true, session: await this.session.createSession(user.id) }
+    if (replace) {
+      response.headers.set('Set-Cookie', cookieValue)
+    } else {
+      response.headers.append('Set-Cookie', cookieValue)
+    }
   }
 
   private async createUser(data: {
@@ -207,7 +230,7 @@ class AuthClass {
     providerAccountName: string
     email: string
     image: string
-  }) {
+  }): Promise<User> {
     const { provider, providerAccountId, providerAccountName, email, image } = data
 
     const existingAccount = await db.account.findUnique({
@@ -240,7 +263,7 @@ class AuthClass {
     })
   }
 
-  private setCorsHeaders(res: Response) {
+  private setCorsHeaders(res: Response): void {
     res.headers.set('Content-Type', 'application/json')
     res.headers.set('Access-Control-Allow-Origin', '*')
     res.headers.set('Access-Control-Request-Method', '*')
