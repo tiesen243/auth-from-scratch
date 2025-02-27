@@ -161,7 +161,7 @@ class AuthClass {
     if (!user) throw new Error('User not found')
     if (!user.password) throw new Error('User has no password')
 
-    const passwordMatch = await new Password().verifyPassword(password, user.password)
+    const passwordMatch = await new Password().verify(password, user.password)
     if (!passwordMatch) throw new Error('Invalid password')
 
     return { success: true, session: await this.session.createSession(user.id) }

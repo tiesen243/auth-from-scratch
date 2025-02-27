@@ -34,7 +34,7 @@ export const signUp = async (
     const data = signUpSchema.parse(Object.fromEntries(formData))
 
     const image = encodeHexLowerCase(sha256(new TextEncoder().encode(data.email)))
-    const password = await new Password().hashPassword(data.password)
+    const password = await new Password().hash(data.password)
 
     await db.user.create({
       data: {
