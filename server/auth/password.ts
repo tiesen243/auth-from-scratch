@@ -1,16 +1,15 @@
-import { hash, verify } from '@node-rs/argon2'
+import { sha3_256 } from '@oslojs/crypto/sha3'
+import { encodeBase32LowerCase } from '@oslojs/encoding'
 
 export class Password {
-  public async hash(password: string): Promise<string> {
-    return await hash(password, {
-      memoryCost: 19456,
-      timeCost: 2,
-      outputLen: 32,
-      parallelism: 1,
-    })
+  public hash(password: string): string {
+    return encodeBase32LowerCase(sha3_256(new TextEncoder().encode(password)))
   }
 
-  public async verify(password: string, hash: string): Promise<boolean> {
-    return await verify(hash, password)
+  public verify(password: string, hash: string): boolean {
+    const hashPassword = encodeBase32LowerCase(
+      sha3_256(new TextEncoder().encode(password)),
+    )
+    return hashPassword === hash
   }
 }

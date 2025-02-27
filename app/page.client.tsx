@@ -16,7 +16,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSession } from '@/hooks/use-session'
-import { signInWithCredentials } from '@/server/auth'
+import { signIn } from '@/server/auth'
 
 export const SignInForm: React.FC<{
   setTokenAction: (token: string, expires: Date) => Promise<void>
@@ -27,11 +27,12 @@ export const SignInForm: React.FC<{
 
   const { mutate, isPending } = useMutation({
     mutationFn: async (formData: FormData) => {
-      const res = await signInWithCredentials({
+      const res = await signIn('credentials', {
         email: formData.get('email') as string,
         password: formData.get('password') as string,
       })
-      if (!res.success) setErrors(res.fieldErrors)
+
+      if (!res?.success) setErrors(res?.fieldErrors)
       else {
         setErrors({})
         return res.session
@@ -78,15 +79,14 @@ export const SignInForm: React.FC<{
           </span>
         </div>
 
-        <form className="grid w-full grid-cols-2 gap-4 *:w-full">
-          <Button variant="outline" formAction="/api/auth/oauth/google">
-            Login with Google
-          </Button>
-
-          <Button variant="outline" formAction="/api/auth/oauth/discord">
+        <div className="grid w-full grid-cols-2 gap-4 *:w-full">
+          <Button variant="outline" onClick={async () => signIn('discord')}>
             Login with Discord
           </Button>
-        </form>
+          <Button variant="outline" onClick={async () => signIn('google')}>
+            Login with Google
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   )

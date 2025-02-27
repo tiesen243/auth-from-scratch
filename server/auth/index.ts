@@ -21,7 +21,7 @@ const google = new Google(
 
 const {
   auth: uncachedAuth,
-  signInWithCredentials,
+  signIn,
   signOut,
   handlers,
 } = Auth({
@@ -68,4 +68,4 @@ const {
 
 const auth = cache(uncachedAuth)
 
-export { auth, signInWithCredentials, signOut, handlers }
+export { auth, signIn, signOut, handlers }

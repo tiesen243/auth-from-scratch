@@ -5,12 +5,8 @@ import { encodeBase32LowerCaseNoPadding, encodeHexLowerCase } from '@oslojs/enco
 import { db } from '@/server/db'
 
 export class Session {
-  private readonly db: typeof db
+  private readonly db: typeof db = db
   private readonly EXPIRATION_TIME = 1000 * 60 * 60 * 24 * 30 // 30 days
-
-  constructor() {
-    this.db = db
-  }
 
   private generateSessionToken(): string {
     const bytes = new Uint8Array(20)

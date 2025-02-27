@@ -1,6 +1,7 @@
 import type { User } from '@prisma/client'
 import type { OAuth2Tokens } from 'arctic'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { generateCodeVerifier, generateState } from 'arctic'
 import { z } from 'zod'
 
@@ -9,6 +10,8 @@ import { env } from '@/env'
 import { Password } from '@/server/auth/password'
 import { Session } from '@/server/auth/session'
 import { db } from '@/server/db'
+
+type SignInType = 'credentials' | 'discord' | 'google'
 
 class AuthClass {
   private readonly db: typeof db = db
@@ -129,12 +132,7 @@ class AuthClass {
         break
       case 'POST':
         if (url.pathname === '/api/auth/sign-out') {
-          const cookies = this.parsedCookies(req.headers)
-          const token =
-            cookies[this.COOKIE_KEY] ??
-            req.headers.get('Authorization')?.replace('Bearer ', '') ??
-            ''
-          await this.session.invalidateSessionToken(token)
+          await this.signOut(req)
           response = new Response('', { status: 204 })
           this.setCookie(response, this.COOKIE_KEY, '', { expires: new Date(0) })
         }
@@ -145,26 +143,32 @@ class AuthClass {
     return response
   }
 
-  public async signInWithCredentials(
-    data: z.infer<typeof credentialsSchema>,
+  public async signIn(
+    type: SignInType,
+    data?: z.infer<typeof credentialsSchema>,
   ): Promise<
     | { success: false; fieldErrors: Record<string, string[]> }
     | { success: true; session: { sessionToken: string; expires: Date } }
+    | undefined
   > {
-    const parsedData = credentialsSchema.safeParse(data)
-    if (!parsedData.success)
-      return { success: false, fieldErrors: parsedData.error.flatten().fieldErrors }
+    if (type === 'credentials') {
+      const parsedData = credentialsSchema.safeParse(data)
+      if (!parsedData.success)
+        return { success: false, fieldErrors: parsedData.error.flatten().fieldErrors }
 
-    const { email, password } = parsedData.data
+      const { email, password } = parsedData.data
 
-    const user = await this.db.user.findUnique({ where: { email } })
-    if (!user) throw new Error('User not found')
-    if (!user.password) throw new Error('User has no password')
+      const user = await this.db.user.findUnique({ where: { email } })
+      if (!user) throw new Error('User not found')
+      if (!user.password) throw new Error('User has no password')
 
-    const passwordMatch = await new Password().verify(password, user.password)
-    if (!passwordMatch) throw new Error('Invalid password')
+      const passwordMatch = new Password().verify(password, user.password)
+      if (!passwordMatch) throw new Error('Invalid password')
 
-    return { success: true, session: await this.session.createSession(user.id) }
+      return { success: true, session: await this.session.createSession(user.id) }
+    } else {
+      redirect(`/api/auth/oauth/${type}`)
+    }
   }
 
   public async signOut(req?: Request): Promise<void> {
@@ -307,8 +311,8 @@ export const Auth = (args: { providers: Providers }) => {
 
   return {
     auth: (req?: Request) => authInstance.auth(req),
-    signInWithCredentials: (data: z.infer<typeof credentialsSchema>) =>
-      authInstance.signInWithCredentials(data),
+    signIn: (type: SignInType, data?: z.infer<typeof credentialsSchema>) =>
+      authInstance.signIn(type, data),
     signOut: (req?: Request) => authInstance.signOut(req),
     handlers: (req: Request) => authInstance.handlers(req),
   }
