@@ -12,16 +12,26 @@ import { Session } from '@/server/auth/session'
 import { db } from '@/server/db'
 
 type SignInType = 'credentials' | 'discord' | 'google'
+interface AuthArgs {
+  providers: Providers
+}
 
 class AuthClass {
-  private readonly db: typeof db = db
-  private readonly session: Session = new Session()
-  private readonly COOKIE_KEY: string = 'auth_token'
+  private readonly db: typeof db
+  private readonly session: Session
+  private readonly password: Password
+  private readonly COOKIE_KEY: string
 
   private readonly providers: Providers
 
-  constructor(args: { providers: Providers }) {
+  constructor(args: AuthArgs) {
+    this.COOKIE_KEY = 'auth_token'
+
     this.providers = args.providers
+
+    this.db = db
+    this.session = new Session()
+    this.password = new Password()
   }
 
   public async auth(req?: Request): Promise<SessionResult> {
@@ -162,7 +172,7 @@ class AuthClass {
       if (!user) throw new Error('User not found')
       if (!user.password) throw new Error('User has no password')
 
-      const passwordMatch = new Password().verify(password, user.password)
+      const passwordMatch = this.password.verify(password, user.password)
       if (!passwordMatch) throw new Error('Invalid password')
 
       return { success: true, session: await this.session.createSession(user.id) }
@@ -211,21 +221,13 @@ class AuthClass {
 
     let cookieValue = `${name}=${value}; HttpOnly; Path=/; SameSite=Lax`
 
-    if (expires) {
-      cookieValue += `; Expires=${expires.toUTCString()}`
-    } else if (maxAge !== undefined) {
-      cookieValue += `; Max-Age=${maxAge}`
-    }
+    if (expires) cookieValue += `; Expires=${expires.toUTCString()}`
+    else if (maxAge !== undefined) cookieValue += `; Max-Age=${maxAge}`
 
-    if (env.NODE_ENV === 'production') {
-      cookieValue += '; Secure'
-    }
+    if (env.NODE_ENV === 'production') cookieValue += '; Secure'
 
-    if (replace) {
-      response.headers.set('Set-Cookie', cookieValue)
-    } else {
-      response.headers.append('Set-Cookie', cookieValue)
-    }
+    if (replace) response.headers.set('Set-Cookie', cookieValue)
+    else response.headers.append('Set-Cookie', cookieValue)
   }
 
   private async createUser(data: {
@@ -306,7 +308,7 @@ const credentialsSchema = z.object({
     ),
 })
 
-export const Auth = (args: { providers: Providers }) => {
+export const Auth = (args: AuthArgs) => {
   const authInstance = new AuthClass(args)
 
   return {
