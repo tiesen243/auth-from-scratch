@@ -11,10 +11,11 @@ import { Password } from '@/server/auth/password'
 import { Session } from '@/server/auth/session'
 import { db } from '@/server/db'
 
-type SignInType = 'credentials' | 'discord' | 'google'
-interface AuthArgs {
+export interface AuthOptions {
   providers: Providers
 }
+
+type SignInType = 'credentials' | 'discord' | 'google'
 
 class AuthClass {
   private readonly db: typeof db
@@ -24,10 +25,10 @@ class AuthClass {
 
   private readonly providers: Providers
 
-  constructor(args: AuthArgs) {
+  constructor(options: AuthOptions) {
     this.COOKIE_KEY = 'auth_token'
 
-    this.providers = args.providers
+    this.providers = options.providers
 
     this.db = db
     this.session = new Session()
@@ -308,8 +309,8 @@ const credentialsSchema = z.object({
     ),
 })
 
-export const Auth = (args: AuthArgs) => {
-  const authInstance = new AuthClass(args)
+export const Auth = (options: AuthOptions) => {
+  const authInstance = new AuthClass(options)
 
   return {
     auth: (req?: Request) => authInstance.auth(req),

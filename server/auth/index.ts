@@ -3,6 +3,7 @@
 import { cache } from 'react'
 import { Discord, Google } from 'arctic'
 
+import type { AuthOptions } from '@/server/auth/auth'
 import { env } from '@/env'
 import { getBaseUrl } from '@/lib/utils'
 import { Auth } from '@/server/auth/auth'
@@ -19,12 +20,7 @@ const google = new Google(
   `${getBaseUrl()}/api/auth/oauth/google/callback`,
 )
 
-const {
-  auth: uncachedAuth,
-  signIn,
-  signOut,
-  handlers,
-} = Auth({
+const authOptions = {
   providers: {
     discord: {
       createAuthorizationURL: (state, codeVerifier) =>
@@ -64,8 +60,9 @@ const {
       }),
     },
   },
-})
+} satisfies AuthOptions
 
+const { auth: uncachedAuth, signIn, signOut, handlers } = Auth(authOptions)
 const auth = cache(uncachedAuth)
 
 export { auth, signIn, signOut, handlers }
