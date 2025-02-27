@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -20,28 +21,29 @@ import { signInWithCredentials } from '@/server/auth'
 export const SignInForm: React.FC<{
   setTokenAction: (token: string, expires: Date) => Promise<void>
 }> = ({ setTokenAction }) => {
+  const { refresh } = useSession()
+
   const [fieldErrors, setErrors] = useState<Record<string, string[]> | undefined>({})
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-
-    try {
+  const { mutate, isPending } = useMutation({
+    mutationFn: async (formData: FormData) => {
       const res = await signInWithCredentials({
-        email: form.get('email') as string,
-        password: form.get('password') as string,
+        email: formData.get('email') as string,
+        password: formData.get('password') as string,
       })
-
       if (!res.success) setErrors(res.fieldErrors)
       else {
-        await setTokenAction(res.session.sessionToken, res.session.expires)
-        toast.success("You're signed in")
+        setErrors({})
+        return res.session
       }
-    } catch (error) {
-      if (error instanceof Error) toast.error(error.message)
-      else toast.error('An error occurred')
-    }
-  }
+    },
+    onSuccess: async (session) => {
+      await setTokenAction(session?.sessionToken ?? '', session?.expires ?? new Date())
+      toast.success("You're signed in")
+      await refresh()
+    },
+    onError: (err) => toast.error(err.message),
+  })
 
   return (
     <Card>
@@ -52,20 +54,20 @@ export const SignInForm: React.FC<{
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="mx-auto grid w-svh max-w-md gap-4">
-          <fieldset className="grid gap-2">
+        <form action={mutate} className="mx-auto grid w-svh max-w-md gap-4">
+          <fieldset className="grid gap-2" disabled={isPending}>
             <Label htmlFor="email">Email</Label>
             <Input type="email" id="email" name="email" />
             <p className="text-destructive text-xs">{fieldErrors?.email}</p>
           </fieldset>
 
-          <fieldset className="grid gap-2">
+          <fieldset className="grid gap-2" disabled={isPending}>
             <Label htmlFor="password">Password</Label>
             <Input type="password" id="password" name="password" />
             <p className="text-destructive text-xs">{fieldErrors?.password}</p>
           </fieldset>
 
-          <Button formAction="/">Sign In</Button>
+          <Button disabled={isPending}>Sign In</Button>
         </form>
       </CardContent>
 

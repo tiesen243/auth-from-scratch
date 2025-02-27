@@ -11,6 +11,7 @@ interface SessionContextValue {
     expres: Date
   }
   isLoading: boolean
+  refresh: () => Promise<void>
   signOut: () => void
 }
 
@@ -52,6 +53,9 @@ export const SessionProvider: React.FC<React.PropsWithChildren> = ({ children })
       value={{
         session: session.data ?? { expres: new Date() },
         isLoading: session.isLoading,
+        refresh: async () => {
+          await session.refetch()
+        },
         signOut: signOut.mutate,
       }}
     >
