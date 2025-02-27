@@ -2,8 +2,9 @@ import '@/app/globals.css'
 
 import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
-import { ThemeProvider } from 'next-themes'
 
+import { Providers } from '@/components/providers'
+import { ThemeBtn } from '@/components/theme-btn'
 import { Toaster } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
 
@@ -30,10 +31,11 @@ export default function RootLayout({
           geistSans.variable,
         )}
       >
-        <ThemeProvider attribute="class" disableTransitionOnChange>
+        <Providers>
           {children}
+          <ThemeBtn />
           <Toaster />
-        </ThemeProvider>
+        </Providers>
       </body>
     </html>
   )

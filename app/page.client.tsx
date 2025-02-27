@@ -4,10 +4,18 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardFooter } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { signInWithCredentials, signOut } from '@/server/auth'
+import { useSession } from '@/hooks/use-session'
+import { signInWithCredentials } from '@/server/auth'
 
 export const SignInForm: React.FC<{
   setTokenAction: (token: string, expires: Date) => Promise<void>
@@ -37,6 +45,12 @@ export const SignInForm: React.FC<{
 
   return (
     <Card>
+      <CardHeader>
+        <CardTitle>Sign In</CardTitle>
+        <CardDescription>
+          Enter your credentials to sign in to your account
+        </CardDescription>
+      </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="mx-auto grid w-svh max-w-md gap-4">
           <fieldset className="grid gap-2">
@@ -79,10 +93,12 @@ export const SignInForm: React.FC<{
 export const SignOutButton: React.FC<{ deleteTokenAction: () => Promise<void> }> = ({
   deleteTokenAction,
 }) => {
+  const { signOut } = useSession()
+
   return (
     <Button
       onClick={async () => {
-        await signOut()
+        signOut()
         await deleteTokenAction()
         toast.success("You're signed out")
       }}

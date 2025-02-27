@@ -24,13 +24,15 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="container flex flex-col items-center gap-4 py-4">
-      <pre className="mx-auto w-svh max-w-md overflow-x-auto">
-        {JSON.stringify(session, null, 2)}
-      </pre>
-
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 py-4">
       {session.user ? (
-        <SignOutButton deleteTokenAction={deleteTokenAction} />
+        <>
+          <pre className="mx-auto w-svh max-w-md overflow-x-auto">
+            {JSON.stringify(session, null, 2)}
+          </pre>
+
+          <SignOutButton deleteTokenAction={deleteTokenAction} />
+        </>
       ) : (
         <SignInForm setTokenAction={setTokenAction} />
       )}

@@ -13,7 +13,7 @@ import { db } from '@/server/db'
 class AuthClass {
   private readonly db: typeof db = db
   private readonly session: Session = new Session()
-  private readonly TOKEN_KEY: string = 'auth_token'
+  private readonly COOKIE_KEY: string = 'auth_token'
 
   private readonly providers: Providers
 
@@ -27,10 +27,10 @@ class AuthClass {
     if (req) {
       const cookies = this.parsedCookies(req.headers)
       authToken =
-        cookies[this.TOKEN_KEY] ??
+        cookies[this.COOKIE_KEY] ??
         req.headers.get('Authorization')?.replace('Bearer ', '')
     } else {
-      authToken = (await cookies()).get(this.TOKEN_KEY)?.value
+      authToken = (await cookies()).get(this.COOKIE_KEY)?.value
     }
 
     if (!authToken) return { expires: new Date() }
@@ -106,7 +106,7 @@ class AuthClass {
               response = new Response('', { status: 302 })
 
               response.headers.set('Location', '/')
-              this.setCookie(response, 'auth_token', session.sessionToken, {
+              this.setCookie(response, this.COOKIE_KEY, session.sessionToken, {
                 expires: session.expires,
                 replace: true,
               })
@@ -131,12 +131,12 @@ class AuthClass {
         if (url.pathname === '/api/auth/sign-out') {
           const cookies = this.parsedCookies(req.headers)
           const token =
-            cookies[this.TOKEN_KEY] ??
+            cookies[this.COOKIE_KEY] ??
             req.headers.get('Authorization')?.replace('Bearer ', '') ??
             ''
           await this.session.invalidateSessionToken(token)
           response = new Response('', { status: 204 })
-          this.setCookie(response, this.TOKEN_KEY, '', { expires: new Date(0) })
+          this.setCookie(response, this.COOKIE_KEY, '', { expires: new Date(0) })
         }
         break
     }
@@ -173,11 +173,11 @@ class AuthClass {
     if (req) {
       const cookies = this.parsedCookies(req.headers)
       token =
-        cookies[this.TOKEN_KEY] ??
+        cookies[this.COOKIE_KEY] ??
         req.headers.get('Authorization')?.replace('Bearer ', '') ??
         ''
     } else {
-      token = (await cookies()).get(this.TOKEN_KEY)?.value ?? ''
+      token = (await cookies()).get(this.COOKIE_KEY)?.value ?? ''
     }
 
     await this.session.invalidateSessionToken(token)
