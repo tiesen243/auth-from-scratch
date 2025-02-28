@@ -21,6 +21,7 @@ const google = new Google(
 )
 
 const authOptions = {
+  cookieKey: 'auth_token',
   providers: {
     discord: {
       createAuthorizationURL: (state, codeVerifier) =>

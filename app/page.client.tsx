@@ -16,13 +16,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useSession } from '@/hooks/use-session'
-import { signIn } from '@/server/auth'
+import { signIn, signOut } from '@/server/auth'
 
-export const SignInForm: React.FC<{
-  setTokenAction: (token: string, expires: Date) => Promise<void>
-}> = ({ setTokenAction }) => {
+export const SignInForm: React.FC = () => {
   const { refresh } = useSession()
-
   const [fieldErrors, setErrors] = useState<Record<string, string[]> | undefined>({})
 
   const { mutate, isPending } = useMutation({
@@ -35,13 +32,12 @@ export const SignInForm: React.FC<{
       if (!res?.success) setErrors(res?.fieldErrors)
       else {
         setErrors({})
-        return res.session
+        return res
       }
     },
-    onSuccess: async (session) => {
-      await setTokenAction(session?.sessionToken ?? '', session?.expires ?? new Date())
-      toast.success("You're signed in")
+    onSuccess: async (data) => {
       await refresh()
+      toast.success(data?.message)
     },
     onError: (err) => toast.error(err.message),
   })
@@ -92,16 +88,14 @@ export const SignInForm: React.FC<{
   )
 }
 
-export const SignOutButton: React.FC<{ deleteTokenAction: () => Promise<void> }> = ({
-  deleteTokenAction,
-}) => {
-  const { signOut } = useSession()
+export const SignOutButton: React.FC = () => {
+  const { refresh } = useSession()
 
   return (
     <Button
       onClick={async () => {
-        signOut()
-        await deleteTokenAction()
+        await signOut()
+        await refresh()
         toast.success("You're signed out")
       }}
     >
