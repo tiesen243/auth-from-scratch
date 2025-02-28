@@ -107,7 +107,7 @@ class AuthHandler {
               const { validateAuthorizationCode, fetchUserUrl, mapUser } = provider
 
               const verifiedCode = await validateAuthorizationCode(
-                'dsadasd',
+                code,
                 codeVerifier,
               )
 
