@@ -18,7 +18,7 @@ export interface AuthOptions {
   providers: Providers
 }
 
-class AuthClass {
+class AuthHandler {
   private readonly db: typeof db
   private readonly session: Session
   private readonly password: Password
@@ -261,7 +261,7 @@ class AuthClass {
 }
 
 export const Auth = (options: AuthOptions) => {
-  const authInstance = new AuthClass(options)
+  const authInstance = new AuthHandler(options)
 
   return {
     auth: (req?: NextRequest) => authInstance.auth(req),
